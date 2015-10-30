@@ -1,0 +1,19 @@
+heat_template_version: 2013-05-23
+
+#resources:
+#  my_instance:
+#    type: OS::Nova::Server
+#    properties:
+#      flavor: m1.tiny
+#      image: TestVM
+
+# Note that the output parameter names must match those in the Kind definition
+outputs:
+  mcn.endpoint.p3:
+    description: blah
+    value:
+      "30.0.0.3"
+  mcn.endpoint.p4:
+    description: blurb
+    value:
+      "30.0.0.3"

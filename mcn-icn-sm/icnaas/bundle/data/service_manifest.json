@@ -1,0 +1,11 @@
+{
+  "service_type": "http://schemas.mobile-cloud-networking.eu/occi/sm#icnaas",
+  "service_description": "MCN ICN Service",
+  "service_attributes": {
+      "mcn.endpoint.icnaas": "immutable",
+      "mcn.endpoint.maas": ""
+  },
+  "service_endpoint": "http://icnaas.cloudcomplab.ch:8892/icnaas/",
+  "depends_on": [
+  ]
+}
