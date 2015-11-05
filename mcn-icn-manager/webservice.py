@@ -16,14 +16,14 @@ __author__ = "Andre Gomes"
 __copyright__ = "Copyright (c) 2013-2015, Mobile Cloud Networking (MCN) project"
 __credits__ = ["Andre Gomes"]
 __license__ = "Apache"
-__version__ = "1.2"
+__version__ = "1.3"
 __maintainer__ = "Andre Gomes"
 __email__ = "gomes@iam.unibe.ch"
 __status__ = "Production"
 
 """
 RESTful Web Service for ICNaaS.
-Version 1.2
+Version 1.3
 """
 
 #!flask/bin/python
@@ -148,11 +148,18 @@ def update_router(router_id):
     if 'cell_id' not in request.json:
         abort(400)
 
+    conn.commit()
+    conn.close()
+
     # update all routes with this router (first delete)
     delete_routes_dst(router_id)
 
     # delete all routers from this router
     delete_routes_router(router_id)
+
+    conn = sqlite3.connect('routers.db')
+    curs = conn.cursor()
+    curs.execute('PRAGMA foreign_keys = ON')
 
     # check if more routers exist at the layer, and otherwise add routes to reroute
     p = (router[4], router_id)
@@ -222,11 +229,15 @@ def delete_router(router_id):
     # delete all routes to this router, add new routes to higher layer if needed
     curs.execute('SELECT * FROM routes WHERE next_hop = ?', t)
     if curs.fetchone() is not None:
+        conn.commit()
+        conn.close()
         delete_routes_dst(router_id)
 
     # delete all routers from this router
     delete_routes_router(router_id)
 
+    conn = sqlite3.connect('routers.db')
+    curs = conn.cursor()
     curs.execute('DELETE FROM routers WHERE public_ip = ?', t)
     conn.commit()
     conn.close()
@@ -353,9 +364,15 @@ def delete_prefix(prefix_id):
     if prefix is None:
         abort(404)
 
+    conn.commit()
+    conn.close()
+
     # delete routes in all routers
     delete_routes_prefix(prefix_id, prefix[1])
 
+    conn = sqlite3.connect('routers.db')
+    curs = conn.cursor()
+    curs.execute('PRAGMA foreign_keys = ON')
     curs.execute('DELETE FROM prefixes WHERE id = ?', t)
     conn.commit()
     conn.close()
