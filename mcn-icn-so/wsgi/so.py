@@ -16,14 +16,14 @@ __author__ = "Andre Gomes"
 __copyright__ = "Copyright (c) 2013-2015, Mobile Cloud Networking (MCN) project"
 __credits__ = ["Andre Gomes"]
 __license__ = "Apache"
-__version__ = "2.0"
+__version__ = "1.6"
 __maintainer__ = "Andre Gomes"
 __email__ = "gomes@inf.unibe.ch"
 __status__ = "Production"
 
 """
 Service Orchestrator for ICNaaS.
-Version 2.0
+Version 1.6
 """
 
 import os
@@ -41,11 +41,9 @@ from sm.so.service_orchestrator import LOG
 from sm.so.service_orchestrator import BUNDLE_DIR
 
 DEFAULT_REGION = 'UBern'
-FMC_ENABLED = False
-NUM_LAYERS = 2
-NUM_ROUTERS_LAYER = 1
 
-# DO NOT CHANGE
+FMC_ENABLED = False
+
 SCALE_NO_ACTION = 0
 SCALE_IN_CPU = 1
 SCALE_OUT_CPU = 2
@@ -76,8 +74,12 @@ class SOE(service_orchestrator.Execution):
         self.maas_endpoint = None
         self.mobaas_endpoint = None
         # Default topology
-        self.layers = {}
-        self.routers = {}
+        self.routers = { 1: { 'public_ip': 'unassigned', 'layer': 0, 'cell_id': 200, \
+            'provisioned': False, 'cpu_scale_in_count': 0, 'cpu_scale_out_count': 0, \
+            'int_scale_in_count': 0, 'int_scale_out_count': 0 }, \
+            2: { 'public_ip': 'unassigned', 'layer': 1, 'cell_id': 0, \
+            'provisioned': False, 'cpu_scale_in_count': 0, 'cpu_scale_out_count': 0, \
+            'int_scale_in_count': 0, 'int_scale_out_count': 0 } }
         self.stack_id = None
         self.deployer = util.get_deployer(self.token,
                                           url_type='public',
@@ -90,20 +92,6 @@ class SOE(service_orchestrator.Execution):
         """
         LOG.debug('Executing design logic')
         self.resolver.design()
-        # Create topology
-        routers_count = 0
-        init_cell_id = 200
-        for layer in range(NUM_LAYERS):
-            self.layers[layer] = { 'cpu_scale_in_count': 0, 'cpu_scale_out_count': 0, \
-                'int_scale_in_count': 0, 'int_scale_out_count': 0 }
-            for i in range(1,NUM_ROUTERS_LAYER + 1):
-                routers_count += 1
-                cell_id = 0
-                if layer == 0:
-                    cell_id = init_cell_id
-                    init_cell_id += 1
-                self.routers[routers_count] = { 'public_ip': 'unassigned', 'layer': layer, \
-                            'cell_id': cell_id, 'provisioned': False }
 
     def deploy(self, attributes):
         """
@@ -180,9 +168,11 @@ class SOE(service_orchestrator.Execution):
             self.endpoint = None
             self.maas_endpoint = None
             self.routers = { 1: { 'public_ip': 'unassigned', 'layer': 0, 'cell_id': 200, \
-            'provisioned': False, 'scale_in_count': 0, 'scale_out_count': 0 }, \
-            2: { 'public_ip': 'unassigned', 'layer': 1, 'cell_id': 0, \
-            'provisioned': False, 'scale_in_count': 0, 'scale_out_count': 0 } }
+                'provisioned': False, 'cpu_scale_in_count': 0, 'cpu_scale_out_count': 0, \
+                'int_scale_in_count': 0, 'int_scale_out_count': 0 }, \
+                2: { 'public_ip': 'unassigned', 'layer': 1, 'cell_id': 0, \
+                'provisioned': False, 'cpu_scale_in_count': 0, 'cpu_scale_out_count': 0, \
+                'int_scale_in_count': 0, 'int_scale_out_count': 0 } }
             self.stack_id = None
 
     def state(self):
@@ -300,103 +290,94 @@ class SOD(service_orchestrator.Decision, threading.Thread):
         # If monitoring is not connected, ignore
         if self.monitor.connFailed:
             return
-        # Check metrics for all active routers in each layer
-        for layer in self.so_e.layers:
-            layer_values = { 'routers_count': 0, 'sum_cpu': 0.0, 'sum_interests': 0 }
-            for r in self.so_e.routers:
-                if self.so_e.routers[r]['layer'] != layer:
-                    continue
-                if self.so_e.routers[r]['public_ip'] != 'unassigned':
-                    values = self.monitor.get(self.so_e.routers[r]['public_ip'])
-                if values is not None:
-                    layer_values['routers_count'] += 1
-                    layer_values['sum_cpu'] += float(values[icnaas.monitor.CCN_ROUTER_CPU])
-                    layer_values['sum_interests'] += int(values[icnaas.monitor.CCN_NUMBER_OF_INTERESTS])
-            if layer_values['routers_count'] > 0:
-                layer_avg = { icnaas.monitor.CCN_ROUTER_CPU: (layer_values['sum_cpu'] / layer_values['routers_count']), \
-                    icnaas.monitor.CCN_NUMBER_OF_INTERESTS: (layer_values['sum_interests'] / float(layer_values['routers_count'])) }
-                actions = self.rules_engine.process(layer_avg)
+        # Check metrics for all active routers
+        for router in self.so_e.routers:
+            values = None
+            if self.so_e.routers[router]['public_ip'] != 'unassigned':
+                values = self.monitor.get(self.so_e.routers[router]['public_ip'])
+            if values is not None:
+                actions = self.rules_engine.process(values)
                 if not actions:
-                    self.scale_actions(SCALE_NO_ACTION, layer)
+                    self.scale_actions(SCALE_NO_ACTION, router)
                 else:
                     for a in actions:
-                        self.scale_actions(a, layer)
+                        self.scale_actions(a, router)
 
-    def scale_actions(self, action, layer):
+    def scale_actions(self, action, router):
         if action == SCALE_NO_ACTION:
-            self.so_e.layers[layer]['cpu_scale_in_count'] = 0
-            self.so_e.layers[layer]['cpu_scale_out_count'] = 0
-            self.so_e.layers[layer]['int_scale_in_count'] = 0
-            self.so_e.layers[layer]['int_scale_out_count'] = 0
+            self.so_e.routers[router]['cpu_scale_in_count'] = 0
+            self.so_e.routers[router]['cpu_scale_out_count'] = 0
+            self.so_e.routers[router]['int_scale_in_count'] = 0
+            self.so_e.routers[router]['int_scale_out_count'] = 0
         elif action == SCALE_IN_CPU or action == SCALE_IN_INTERESTS:
             safeguard = CPU_SCALE_IN_SAFEGUARD
-            count = self.so_e.layers[layer]['cpu_scale_in_count']
+            count = self.so_e.routers[router]['cpu_scale_in_count']
             if action == SCALE_IN_INTERESTS:
                 safeguard = INTERESTS_SCALE_IN_SAFEGUARD
-                count = self.so_e.layers[layer]['int_scale_in_count']
-                self.so_e.layers[layer]['int_scale_out_count'] = 0
+                count = self.so_e.routers[router]['int_scale_in_count']
+                self.so_e.routers[router]['int_scale_out_count'] = 0
             else:
-                self.so_e.layers[layer]['cpu_scale_out_count'] = 0
+                self.so_e.routers[router]['cpu_scale_out_count'] = 0
             if count >= (safeguard - 1):
                 if action == SCALE_IN_INTERESTS:
-                    self.so_e.layers[layer]['int_scale_in_count'] = 0
+                    self.so_e.routers[router]['int_scale_in_count'] = 0
                 else:
-                    self.so_e.layers[layer]['cpu_scale_in_count'] = 0
-                # Do not scale in if minimum amount of components are running
-                minimum = 1
-                #if layer == 1:
-                #    minimum = 2
-                if sum(1 for x in self.so_e.routers.values() if x['layer'] == layer) > minimum:
-                    # SCALE IN
-                    for k in reversed(sorted(self.so_e.routers.keys())):
-                        if self.so_e.routers[k]['layer'] == layer:
-                            # Remove from ICN Manager
-                            out = requests.delete(self.so_e.endpoint + '/icnaas/api/v1.0/routers/' \
-                                + self.so_e.routers[k]['public_ip'])
-                            # Update service instance
-                            del self.so_e.routers[k]
-                            self.so_e.update()
-                            self.so_e.provision()
-                            self.so_e.state()
-                            return
+                    self.so_e.routers[router]['cpu_scale_in_count'] = 0
+                    # Do not scale in if minimum amount of components are running
+                    layer = self.so_e.routers[router]['layer']
+                    minimum = 1
+                    #if layer == 1:
+                    #    minimum = 2
+                    if sum(1 for x in self.so_e.routers.values() if x['layer'] == layer) <= minimum:
+                        continue
+                    else:
+                        # SCALE IN
+                        for k in reversed(sorted(self.so_e.routers.keys())):
+                            if self.so_e.routers[k]['layer'] == layer:
+                                # Remove from ICN Manager
+                                out = requests.delete(self.so_e.endpoint + '/icnaas/api/v1.0/routers/' \
+                                    + self.so_e.routers[k]['public_ip'])
+                                # Update service instance
+                                del self.so_e.routers[k]
+                                self.so_e.update()
+                                self.so_e.provision()
+                                self.so_e.state()
+                                return
             else:
                 if action == SCALE_IN_INTERESTS:
-                    self.so_e.layers[layer]['int_scale_in_count'] += 1
+                    self.so_e.routers[router]['int_scale_in_count'] += 1
                 else:
-                    self.so_e.layers[layer]['cpu_scale_in_count'] += 1
+                    self.so_e.routers[router]['cpu_scale_in_count'] += 1
         elif action == SCALE_OUT_CPU or action == SCALE_OUT_INTERESTS:
             safeguard = CPU_SCALE_OUT_SAFEGUARD
-            count = self.so_e.layers[layer]['cpu_scale_out_count']
+            count = self.so_e.routers[router]['cpu_scale_out_count']
             if action == SCALE_OUT_INTERESTS:
                 safeguard = INTERESTS_SCALE_OUT_SAFEGUARD
-                count = self.so_e.layers[layer]['int_scale_out_count']
-                self.so_e.layers[layer]['int_scale_in_count'] = 0
+                count = self.so_e.routers[router]['int_scale_out_count']
+                self.so_e.routers[router]['int_scale_in_count'] = 0
             else:
-                self.so_e.layers[layer]['cpu_scale_in_count'] = 0
+                self.so_e.routers[router]['cpu_scale_in_count'] = 0
             # SCALE OUT
             if count >= (safeguard - 1):
                 if action == SCALE_OUT_INTERESTS:
-                    self.so_e.layers[layer]['int_scale_out_count'] = 0
+                    self.so_e.routers[router]['int_scale_out_count'] = 0
                 else:
-                    self.so_e.layers[layer]['cpu_scale_out_count'] = 0
-                cell_id = 0
-                if layer == 0:
-                    for x in self.so_e.routers.values():
-                        if x['cell_id'] > cell_id:
-                            cell_id = x['cell_id']
-                    cell_id += 1
+                    self.so_e.routers[router]['cpu_scale_out_count'] = 0
+                layer = self.so_e.routers[router]['layer']
+                cell_id = self.so_e.routers[router]['cell_id']
                 key = max(self.so_e.routers.keys()) + 1
                 self.so_e.routers[key] = { 'public_ip': 'unassigned', 'layer': layer, \
-                    'cell_id': cell_id, 'provisioned': False }
+                    'cell_id': cell_id, 'provisioned': False, 'cpu_scale_in_count': 0, \
+                    'cpu_scale_out_count': 0, 'int_scale_in_count': 0, 'int_scale_out_count': 0 }
                 self.so_e.update()
                 self.so_e.provision()
                 self.so_e.state()
                 return
             else:
                 if action == SCALE_OUT_INTERESTS:
-                    self.so_e.layers[layer]['int_scale_out_count'] += 1
+                    self.so_e.routers[router]['int_scale_out_count'] += 1
                 else:
-                    self.so_e.layers[layer]['cpu_scale_out_count'] += 1
+                    self.so_e.routers[router]['cpu_scale_out_count'] += 1
 
 class RulesEngine(object):
     """
