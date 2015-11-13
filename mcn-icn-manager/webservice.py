@@ -16,14 +16,14 @@ __author__ = "Andre Gomes"
 __copyright__ = "Copyright (c) 2013-2015, Mobile Cloud Networking (MCN) project"
 __credits__ = ["Andre Gomes"]
 __license__ = "Apache"
-__version__ = "1.3"
+__version__ = "1.4"
 __maintainer__ = "Andre Gomes"
 __email__ = "gomes@iam.unibe.ch"
 __status__ = "Production"
 
 """
 RESTful Web Service for ICNaaS.
-Version 1.3
+Version 1.4
 """
 
 #!flask/bin/python
@@ -109,6 +109,11 @@ def create_router():
     conn = sqlite3.connect('routers.db')
     curs = conn.cursor()
     curs.execute('PRAGMA foreign_keys = ON')
+    t = (request.json['public_ip'],)
+    curs.execute('SELECT * FROM routers WHERE public_ip = ?', t)
+    rt = curs.fetchone()
+    if rt is not None:
+        abort(409)
     curs.execute('INSERT INTO routers VALUES (?,?,?,?,?,?)', router)
     conn.commit()
 
@@ -133,7 +138,7 @@ def update_router(router_id):
     curs = conn.cursor()
     curs.execute('PRAGMA foreign_keys = ON')
     t = (router_id,)
-    curs.execute('SELECT * FROM routers WHERE public_ip=?', t)
+    curs.execute('SELECT * FROM routers WHERE public_ip = ?', t)
     router = curs.fetchone()
     if router is None:
         abort(404)
@@ -309,6 +314,11 @@ def create_prefix():
     conn = sqlite3.connect('routers.db')
     curs = conn.cursor()
     curs.execute('PRAGMA foreign_keys = ON')
+    t = (request.json['url'],)
+    curs.execute('SELECT * FROM prefixes WHERE url = ?', t)
+    prefix = curs.fetchone()
+    if prefix is not None:
+        abort(409)
     curs.execute('INSERT INTO prefixes (url, balancing) VALUES (?,?)', data)
     conn.commit()
     rowid = curs.lastrowid
