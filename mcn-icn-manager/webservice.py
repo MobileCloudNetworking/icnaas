@@ -480,7 +480,9 @@ def get_client_endpoints():
 def get_server_endpoints():
     conn = sqlite3.connect('routers.db')
     curs = conn.cursor()
-    curs.execute('SELECT * FROM routers WHERE layer >= 1 AND layer != 100')
+    curs.execute('SELECT MAX(layer) AS layer FROM routers WHERE layer != 100')
+    t = curs.fetchone()
+    curs.execute('SELECT * FROM routers WHERE layer = ?', t)
     res = curs.fetchall()
     conn.close()
     routers = [
