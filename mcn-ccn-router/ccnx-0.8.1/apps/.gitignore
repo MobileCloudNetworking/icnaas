@@ -1,7 +1,0 @@
-conf.mk
-generic.mk
-subr.mk
-include
-local
-local/
-local.subdirs

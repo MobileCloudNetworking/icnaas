@@ -2536,12 +2536,6 @@ remove_content(struct ccnd_handle *h, struct content_entry *content)
     ccny_remove(h->content_tree, y);
     content = NULL;
     ccny_destroy(h->content_tree, &y); /* releases content as well */
-
-    /* AG: Output new cache size for MaaS */
-    char outputCacheSize[64];
-    sprintf(outputCacheSize, "/bin/sh /home/centos/monitoring/cache.sh %u", h->content_tree->n);
-    system(outputCacheSize);
-
     return(0);
 }
 
@@ -5008,10 +5002,6 @@ Bail:
         }
         content_tree_trim(h);
     }
-    /* AG: Output new cache size for MaaS */
-    char outputCacheSize[64];
-    sprintf(outputCacheSize, "/bin/sh /home/centos/monitoring/cache.sh %u", h->content_tree->n);
-    system(outputCacheSize);
 }
 
 /**
@@ -5069,8 +5059,6 @@ process_input_message(struct ccnd_handle *h, struct face *face,
             }
             return;
         case CCN_DTAG_Interest:
-            /* AG: Interest counter for MaaS */
-            system("/bin/sh /home/centos/monitoring/interests.sh");
             process_incoming_interest(h, face, msg, size);
             return;
         case CCN_DTAG_ContentObject:
@@ -6127,12 +6115,6 @@ ccnd_create(const char *progname, ccnd_logger logger, void *loggerdata)
     ccnd_msg(h, "CCND_DEBUG=%d CCND_CAP=%lu", h->debug, h->capacity);
     cap = 100000; /* Don't try to allocate an insanely high number */
     cap = h->capacity < cap ? h->capacity : cap;
-
-    /* AG: CAP for MaaS */
-    /*char outputCAP[64];
-    sprintf(outputCAP, "/bin/sh /home/centos/monitoring/cache.sh %u", cap);
-    system(outputCAP);*/
-
     h->content_tree = ccn_nametree_create(cap);
     h->content_tree->data = h;
     h->content_tree->pre_remove = &content_preremove;

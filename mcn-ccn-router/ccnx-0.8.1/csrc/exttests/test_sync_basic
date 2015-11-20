@@ -1,2 +1,0 @@
-SyncTest -basic 2>syncbasic.err > syncbasic.out || Fail SyncTest -basic
-diff /dev/null syncbasic.err || Fail error output

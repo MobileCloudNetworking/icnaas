@@ -68,6 +68,14 @@ static void send_http_response(struct ccnd_handle *h, struct face *face,
                                struct ccn_charbuf *response);
 static struct ccn_charbuf *collect_stats_html(struct ccnd_handle *h);
 static struct ccn_charbuf *collect_stats_xml(struct ccnd_handle *h);
+/* 
+ * MaaS (Zabbix) statistics collection
+ * Mobile Cloud Networking (MCN) project
+ * gomes@inf.unibe.ch
+ */
+static struct ccn_charbuf *collect_stats_cache(struct ccnd_handle *h);
+static struct ccn_charbuf *collect_stats_interests(struct ccnd_handle *h);
+/* */
 
 /* HTTP */
 
@@ -96,7 +104,7 @@ int
 ccnd_stats_handle_http_connection(struct ccnd_handle *h, struct face *face)
 {
     struct ccn_charbuf *response = NULL;
-    char rbuf[16];
+    char rbuf[20];
     int i;
     int nspace;
     int n;
@@ -142,6 +150,20 @@ ccnd_stats_handle_http_connection(struct ccnd_handle *h, struct face *face)
         response = collect_stats_xml(h);
         send_http_response(h, face, "text/xml", response);
     }
+    /* 
+     * MaaS (Zabbix) statistics collection
+     * Mobile Cloud Networking (MCN) project
+     * gomes@inf.unibe.ch
+     */
+    else if (0 == strcmp(rbuf, "GET /?f=cache ")) {
+        response = collect_stats_cache(h);
+        send_http_response(h, face, "text/html", response);
+    }
+    else if (0 == strcmp(rbuf, "GET /?f=interests ")) {
+        response = collect_stats_interests(h);
+        send_http_response(h, face, "text/html", response);
+    }
+    /* */
     else if (0 == strcmp(rbuf, "GET "))
         ccnd_send(h, face, resp404, strlen(resp404));
     else
@@ -171,6 +193,27 @@ send_http_response(struct ccnd_handle *h, struct face *face,
     ccnd_send(h, face, buf, hdrlen);
     ccnd_send(h, face, response->buf, response->length);
 }
+
+/* 
+ * MaaS (Zabbix) statistics collection
+ * Mobile Cloud Networking (MCN) project
+ * gomes@inf.unibe.ch
+ */
+static struct ccn_charbuf *
+collect_stats_cache(struct ccnd_handle *h)
+{
+    struct ccn_charbuf *b = ccn_charbuf_create();
+    ccn_charbuf_putf(b, "%lu", h->content_tree->n * 4096);
+    return(b);
+}
+static struct ccn_charbuf *
+collect_stats_interests(struct ccnd_handle *h)
+{
+    struct ccn_charbuf *b = ccn_charbuf_create();
+    ccn_charbuf_putf(b, "%lu", h->interests_accepted);
+    return(b);
+}
+/* */
 
 /* Common statistics collection */
 
